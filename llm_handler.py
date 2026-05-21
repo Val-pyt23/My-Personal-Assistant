@@ -1,6 +1,6 @@
 import ollama
 
-def generate_response_stream(konteks_pesan, pdf_text_context=None, user_input=""):
+def generate_response_stream(konteks_pesan, pdf_text_context=None, user_input="", model_pilihan='qwen2.5:7b'):
     """
     Fungsi generator untuk memanggil Ollama dengan efek streaming.
     Menerima riwayat pesan dan teks PDF (jika ada).
@@ -17,6 +17,7 @@ Setiap kali menulis rumus, persamaan, atau model pemodelan, kamu WAJIB membungku
 
 2. PEMROGRAMAN PYTHON (ATURAN KETAT): 
 JANGAN PERNAH menuliskan contoh kode (script) KECUALI pengguna secara eksplisit memintanya (misal: "tolong buatkan kodenya"). Jika pengguna bertanya tentang teori, daftar model, atau konsep, berikan penjelasan singkat, padat, dan jelas tanpa kode.
+Jangan memberikan contoh penggunaan kode python jika user tidak memintanya, berikan contoh dalam bentuk teks yang berisi contoh case di real world nya saja.
 
 3. GAYA INTERAKSI & PANDUAN TINDAKAN:
 Berikan jawaban yang to-the-point. Di paragraf paling akhir, kamu WAJIB memberikan satu pertanyaan penutup yang natural untuk menanyakan tindakan atau langkah teknis apa yang ingin dilakukan pengguna selanjutnya terkait informasi tersebut (contoh: "Apakah kamu ingin saya mengekstrak metodologinya?", atau "Bagian mana dari dokumen ini yang ingin kita bedah selanjutnya?"). 
@@ -45,7 +46,7 @@ Jika pengguna menanyakan informasi faktual dari dokumen (seperti Judul, Nama Pen
 
     # 4. Panggil model dan yield hasilnya secara streaming
     for chunk in ollama.chat(
-        model='qwen2.5:7b',
+        model=model_pilihan,
         messages=pesan_final,
         stream=True
     ):

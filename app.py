@@ -1,5 +1,6 @@
 import streamlit as st
 import pdfplumber
+import ollama
 
 # Import fungsi dari modul lokal
 from database import (
@@ -153,21 +154,6 @@ def inject_custom_css():
         [data-testid="stSidebar"] hr {
           border-color: var(--border2) !important;
           margin: 4px 0 !important;
-        }
-
-        /* Sidebar footer — model status */
-        [data-testid="stSidebar"]::after {
-          content: '● Qwen 2.5 · Ollama Local';
-          position: fixed;
-          bottom: 0; left: 0;
-          width: 272px;
-          padding: 10px 16px;
-          background: var(--bg-sidebar);
-          border-top: 1px solid var(--border2);
-          color: var(--text-3);
-          font-size: 11px;
-          font-family: 'Inter', sans-serif;
-          letter-spacing: 0.3px;
         }
 
         /* ════════════════════════════
@@ -503,7 +489,7 @@ def inject_custom_css():
         """, unsafe_allow_html=True)
 
 # ================= KONFIGURASI HALAMAN =================
-st.set_page_config(page_title="Local AI Assistant", page_icon="🤖", layout="wide", initial_sidebar_state="expanded")
+st.set_page_config(page_title="Local AI Assistant", page_icon="", layout="wide", initial_sidebar_state="expanded")
 
 inject_custom_css()
 
@@ -549,22 +535,37 @@ if "page" not in st.session_state:
 with st.sidebar:
     st.title("Chat History")
     
-    if st.button("New Chat", use_container_width=True):
+    # 1. Tombol New Chat di paling atas (Diberi key khusus agar aman)
+    if st.button("New Chat", use_container_width=True, key="btn_new_chat_sidebar"):
         st.session_state.current_session_id = create_new_session()
-        st.session_state.page = "chat"  # pindah ke halaman chat
+        st.session_state.page = "chat"  
         st.rerun()
     
     st.divider()
     
+    # 2. Tampilkan daftar riwayat chat
     sessions = get_all_sessions()
-    
-    # Sesuai dengan database.py versi awal (hanya 2 output)
     for session_id, title in sessions:
         btn_label = f"{title}" if session_id == st.session_state.current_session_id else title
         if st.button(btn_label, key=session_id, use_container_width=True):
             st.session_state.current_session_id = session_id
-            st.session_state.page = "chat"  # pindah ke halaman chat
+            st.session_state.page = "chat"  
             st.rerun()
+            
+    # 3. Beri garis pembatas antara riwayat dan menu model
+    st.divider()
+
+    # 4. Pendeteksi model dinamis
+    try:
+        daftar_model_lokal = [model['name'] for model in ollama.list()['models']]
+    except Exception:
+        daftar_model_lokal = ["qwen2.5:7b", "llama3.2:1b"]
+        
+    tag_model_ollama = st.selectbox(
+        "Pilih Model:",
+        daftar_model_lokal,
+        label_visibility="collapsed"
+    )
 
 # ================= ROUTING: HOME vs CHAT =================
 if st.session_state.page == "home":
@@ -677,24 +678,46 @@ else:
 
         with st.chat_message("assistant"):
             message_placeholder = st.empty()
+            btn_placeholder = st.empty() 
+            
+            # Variabel penampung untuk menyelamatkan teks jika distop mendadak
+            st.session_state.temp_layar_teks = ""
+            
+            # Fungsi Callback: Dieksekusi seketika SAAT tombol stop ditekan
+            def stop_generation_callback():
+                if st.session_state.temp_layar_teks:
+                    save_message(st.session_state.current_session_id, "assistant", st.session_state.temp_layar_teks)
+            
+            # Tampilkan tombol Stop melayang di atas teks
+            with btn_placeholder.container():
+                st.button("Stop Generate", on_click=stop_generation_callback, key=f"stop_btn_{len(chat_history)}")
+            
             full_response = ""
             layar_teks = ""
             
             try:
-                for chunk_text in generate_response_stream(konteks_terbatas, pdf_text_context, pesan_teks):
+                for chunk_text in generate_response_stream(konteks_terbatas, pdf_text_context, pesan_teks,tag_model_ollama):
                     full_response += chunk_text
                     
                     # Render ulang matematika untuk mencegah layar bocor
                     layar_teks = full_response.replace("\\[", "$$").replace("\\]", "$$").replace("\\(", "$").replace("\\)", "$")
                     
+                    # Update memori sementara secara real-time
+                    st.session_state.temp_layar_teks = layar_teks
+                    
                     message_placeholder.markdown(layar_teks + "▌")
                     
                 message_placeholder.markdown(layar_teks)
+                
+                # Simpan ke database jika AI selesai menjawab dengan normal (TIDAK distop)
+                save_message(st.session_state.current_session_id, "assistant", layar_teks)
+                
             except Exception as e:
                 st.error(f"Terjadi kesalahan: {e}")
-                layar_teks = "Maaf, terjadi kesalahan saat menyambungkan ke Ollama. Pastikan mesin Ollama sudah dinyalakan ulang."
-            
-        save_message(st.session_state.current_session_id, "assistant", layar_teks)
+                save_message(st.session_state.current_session_id, "assistant", "Maaf, terjadi kesalahan saat menyambungkan ke Ollama. Pastikan mesin Ollama sudah dinyalakan ulang.")
+                
+            # Hancurkan/sembunyikan tombol stop setelah AI selesai menjawab
+            btn_placeholder.empty()
 
         if is_first_message:
             new_title = pesan_teks[:25] + "..." if len(pesan_teks) > 25 else pesan_teks
