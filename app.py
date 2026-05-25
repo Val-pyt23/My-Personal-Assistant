@@ -568,8 +568,8 @@ with st.sidebar:
     )
 
 # ================= ROUTING: HOME vs CHAT =================
-if st.session_state.page == "home":
-    # ── HOMEPAGE ──
+if st.session_state.page == "":
+    # ── HOMEPAGE ──home
     from datetime import datetime
     now_hour = datetime.now().hour
     greeting = "Selamat pagi" if now_hour < 12 else ("Selamat siang" if now_hour < 15 else ("Selamat sore" if now_hour < 18 else "Selamat malam"))
